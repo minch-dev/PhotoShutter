@@ -18,18 +18,10 @@ void pulse(int cycles){
     int c = 0;
     while(c<cycles){
         c++;
-        PORTB=0b11111111;
-        PORTD.5 = 1;
-        PORTD.4 = 1; 
-        PORTD.3 = 1;
-        PORTD.2 = 1;
-        delay_us(10);
-        PORTB=0b00000000;
-        PORTD.5 = 0;
-        PORTD.4 = 0; 
-        PORTD.3 = 0;
-        PORTD.2 = 0;
-        delay_us(15);
+        PORTA.0 = 1;
+        delay_us(6);
+        PORTA.0 = 0;
+        delay_us(19);
     }
     delay_us(600);
 }
@@ -207,18 +199,16 @@ if(PIND.4 == 1){ //minutes
 
 
     while(1){
+		//Sony IR start
+		shutter();
+		address();
+		delay_ms(11);
+		shutter();
+		address();
+		//Sony IR end
+		
         //physical switch off  
         PORTA.0 = 0;
-        
-            //Sony IR start
-            shutter();
-            address();
-            delay_ms(11);
-            shutter();
-            address();
-            //Sony IR end
-        
-        //physical switch off
         delay_ms(200);
         //physical switch on
         PORTA.0 = 1;  
