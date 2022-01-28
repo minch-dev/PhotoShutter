@@ -11,31 +11,41 @@ ATtiny2313 8 MHz
 
 const int x0 = 24;
 const int x1 = 48;
-
+const int ON = 0;  // reversed for both transistor and buttons
+const int OFF = 1;
+int FOREVER = 1;
+float U = 0;
+int BASE = 0;
+int TIMEOUT = 0;
+int RELAY = 0;
+int IR = 1;
+float SUBTRACT = 0;
 //1s/40kHz=25us total (6+19) pulse (microseconds)
 //600us/25us=24 cycles
 void pulse(int cycles){
     int c = 0;
     while(c<cycles){
         c++;
-        PORTA.0 = 1;
+        PORTA.0 = ON;
         delay_us(6);
-        PORTA.0 = 0;
+        PORTA.0 = OFF;
         delay_us(19);
     }
     delay_us(600);
 }
 
+//1800us*4 + 1200us*3 = 7200+3600 = 10800us = 10.8ms
 void shutter(){
-    pulse(x1);
-    pulse(x0);
-    pulse(x1);
+    pulse(x1); //1800us
+    pulse(x0); //1200us
+    pulse(x1); //1800us
     pulse(x1);
     pulse(x0);
     pulse(x1);
     pulse(x0);
 }
 
+//1800us*5 + 1200us*2 = 9000+2400 = 11400us = 11.4ms
 void shutter2sec(){
     pulse(x1);
     pulse(x1);
@@ -46,6 +56,7 @@ void shutter2sec(){
     pulse(x0);
 }
 
+//1800us*2 + 1200us*5 = 3600+6000 = 9600us = 9.6ms
 void videobutton(){
     pulse(x1);
     pulse(x0);
@@ -56,6 +67,7 @@ void videobutton(){
     pulse(x0);
 }
 
+//1800us*8 + 1200us*5 = 14400+6000 = 20400us = 20.4ms
 void address(){
     pulse(x0);
     pulse(x1);
@@ -72,44 +84,8 @@ void address(){
     pulse(x1);
 }
 
-
-/*
-void delay_second(int n){
-    while(n--){
-        delay_ms(1000);
-    }
-
-}
-
-void delay_minute(int n){
-    while(n--){
-        delay_ms(60000);
-    }
-
-}
-
-void delay_hour(int n){
-    while(n--){
-        delay_ms(3600000);
-    }
-
-}
-
-void delay_day(int n){
-    while(n--){
-        delay_ms(86400000);
-    }
-
-}
-void delay_shot(){
-      delay_ms(200);   //for camera to take a shot
-}
-*/
 void main(void)
 {
-// Declare your local variables here
-//int unit_count = 0;
-
 // Crystal Oscillator division factor: 1
 #pragma optsize-
 CLKPR=0x80;
@@ -119,102 +95,86 @@ CLKPR=0x00;
 #endif
 
 
+//DDRx 0 - input pin
+    //PORTxn 1 - pull-up enabled
+//DDRx 1 - output pin
+
 // Port A
-//NOTHING RESET UNUSED_OUT RELAY
-DDRA=0b0011;
 //Should be high for out
-PORTA=0x0011;
+//VOID RESET FREE RELAY
+DDRA =0b0001;
+PORTA=0b0011;
+PORTA.0 = OFF;
 
 // Port B
-// 30 20 10 5 4 3 2 1
 //All input
+//high by default, low when shorted
+//30 20 10 5 4 3 2 1
 DDRB=0b00000000;
-//Should be high (we short it to ground to make it low?)
-PORTB=0b00000000;
+PORTB=0b11111111;
 
 // Port D
-// CLCK  day  hour  min  sec  UNUSED UNUSED
+//All input
+//VOID RELAY_ON +0.5 +0.25  day  hour  min  sec 
 DDRD=0b00000000;
-//Should be low
-PORTD=0b00000000;
+PORTD=0b11111111;
 
-PORTA.0 = 0;
 delay_ms(200);
 
+if(PINA.1 == ON){/*doesn't work as input*/}
 
+if(PINB.0 == ON){U += 1;}
+if(PINB.1 == ON){U += 2;}
+if(PINB.2 == ON){U += 3;}
+if(PINB.3 == ON){U += 4;}
+if(PINB.4 == ON){U += 5;} 
+if(PINB.5 == ON){U += 10;}
+if(PINB.6 == ON){U += 20;}
+if(PINB.7 == ON){U += 30;}
 
+if(PIND.0 == ON){BASE = 1000;}
+if(PIND.1 == ON){BASE = 60*1000;}
+if(PIND.2 == ON){BASE = 60*60*1000;}
+if(PIND.3 == ON){BASE = 24*60*60*1000;}
+if(PIND.4 == ON){U += 0.25;}
+if(PIND.5 == ON){U += 0.5;}
 
-//this SHIT SDOESNT'T WORK
-/*
-unit_count = 0;
-if(PINB.0 == 1){unit_count = 1;}
-if(PINB.1 == 1){unit_count = 2;}
-if(PINB.2 == 1){unit_count = 3;}
-if(PINB.3 == 1){unit_count = 4;}
-if(PINB.4 == 1){unit_count = 5;} 
-if(PINB.5 == 1){unit_count = 10;}
-if(PINB.6 == 1){unit_count = 20;}
-if(PINB.7 == 1){unit_count = 30;}
-if(unit_count==0){
-    unit_count=1; //no pins
+if(PIND.6 == ON){RELAY = 1;}
+
+if(IR){
+    SUBTRACT+= 73.4;
+}
+if(RELAY){
+    SUBTRACT+= 200;
 }
 
+TIMEOUT = (int)( ((float)BASE * U)-SUBTRACT );
 
-
-if(PIND.4 == 1){ //minutes
-    while(1){
-        //take photo    
-        PORTA.0 = 1;
-        delay_shot();
-        PORTA.0 = 0;
-        delay_minute(unit_count);
+while(FOREVER){
+    if(IR){
+        //Sony IR start (73.4 ms total)
+        shutter();
+        address();
+        delay_ms(11);
+        shutter();
+        address();
     }
-} else if(PIND.3 == 1){ //hours
-    while(1){
-        //take photo    
-        PORTA.0 = 1;
-        delay_shot();
-        PORTA.0 = 0;
-        delay_hour(unit_count);
-    }
-} else if(PIND.2 == 1){ //days
-    while(1){
-        //take photo    
-        PORTA.0 = 1;
-        delay_shot();
-        PORTA.0 = 0;
-        delay_day(unit_count);
-    }
-}  else {  //seconds
-    while(1){
-        //take photo    
-        PORTA.0 = 1;
-        delay_shot();
-        PORTA.0 = 0;
-        delay_second(unit_count);
-    }
-}
-*/
-
-
-
-    while(1){
-		//Sony IR start
-		shutter();
-		address();
-		delay_ms(11);
-		shutter();
-		address();
-		//Sony IR end
-		
-        //physical switch off  
-        PORTA.0 = 0;
+    
+    if(RELAY){
+        //relay
+        PORTA.0 = ON;
         delay_ms(200);
-        //physical switch on
-        PORTA.0 = 1;  
-        delay_ms(800);     //1sec 
-        //delay_ms(359800); //360000      6min 
+        PORTA.0 = OFF;  
     }
+
+    
+    if(!TIMEOUT){
+        FOREVER = 0; //fire only this time if no timeout is set
+    } else {
+        delay_ms(TIMEOUT);
+    }    
+
+}
 
 
     
