@@ -1,6 +1,6 @@
 /*****************************************************
 Universal autoshutter for digital cameras
-26.02.2018 - ...
+26.02.2018 - 20.08.2022 by https://github.com/minch-yoda/
 ATtiny2313 8 MHz
 *****************************************************/
 
@@ -122,7 +122,7 @@ PORTD=0b11111111;
 delay_ms(100);
 
 //0 means pin is shorted (ON) so we check for false value
-if(!PINA.1){CMD = 2;}
+
 
 if(!PIND.0){BASE = 1000;}      //seconds
 if(!PIND.1){BASE = 60000;}     //minutes 60*1000
@@ -138,49 +138,58 @@ if(!PINB.5){U += 10;}
 if(!PINB.6){U += 20;}
 if(!PINB.7){U += 30;}
 
-TIMEOUT = (BASE * U) - 100;
+TIMEOUT = (BASE * U);
 
-if(RELAY){TIMEOUT -= 200;}
 if(!PIND.4){TIMEOUT += BASE/4;}   //+0.25
-if(!PIND.5){U += BASE/2;}         //+0.5
+if(!PIND.5){TIMEOUT += BASE/2;}   //+0.5
 
-if(!PIND.6){CMD = 3;}
+if(!PINA.1){CMD = 2;}             //shutter 2 sec (Nex5 native command)
+if(!PIND.6){CMD = 3;}             //video
+if(!PINA.1 && !PIND.6){CMD = 4;} //shutter once in x sec
 
-
+if(TIMEOUT>=100){ //we don't want UINT_MAX
+	TIMEOUT -= 100; //time buffer to make IR commands execution time identical
+}
+if(RELAY && CMD!=4 && TIMEOUT>=200){ //we don't want UINT_MAX, also we don't need to subtract in "shutter once in x sec" mode
+	TIMEOUT -= 200; //accounting for relay interval
+}
 
 while(1){
-
-        //Sony IR start 
+    //Sony IR start 
     switch(CMD){
-        case 1:
+        case 1:	 //shutter
             shutter();
             address();
             delay_ms(11);
             shutter();
             address();
             delay_ms(20.6); //100 - 79.4
-            break;
-            
-        case 2:
+        break;
+        case 2:  //shutter 2 sec
             shutter2sec();
             address();
             delay_ms(11);
             shutter2sec();
             address();
             delay_ms(19.4); //100 - 80.6
-            break;
-        
         break;
-        case 3:
+        case 3:  //video
             video();
             address();
             delay_ms(11);
             video();
             address();
 			delay_ms(23); //100 - 77
-            
-            break;
-            
+        break;
+        case 4:	 //shutter once in x sec
+			delay_ms(TIMEOUT);
+            shutter();
+            address();
+            delay_ms(11);
+            shutter();
+            address();
+            delay_ms(20.6); //100 - 79.4
+        break;
         default: break;
     }
     
@@ -192,10 +201,10 @@ while(1){
     }
 
     
-    if(TIMEOUT){
+    if(CMD!=4 && TIMEOUT){
         delay_ms(TIMEOUT);
     } else {
-        break; //fire only this time if no timeout is set
+        break; //fire only this time if no timeout is set or the cmd is "shutter once in x sec"
     }    
 
 }
